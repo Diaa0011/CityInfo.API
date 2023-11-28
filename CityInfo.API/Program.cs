@@ -1,9 +1,12 @@
 using CityInfo.API;
 using CityInfo.API.DbContexts;
 using CityInfo.API.Services;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using System.Text;
 
 //Creating logger(serilog) with more features and configrations instead of the default logger of asp.net 
 Log.Logger = new LoggerConfiguration()
@@ -41,6 +44,32 @@ builder.Services.AddDbContext<CityInfoContext>(
     );
 builder.Services.AddScoped<ICityInfoRepository, CityInfoRepository>();
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+builder.Services.AddAuthentication("Bearer")
+    .AddJwtBearer(options=>{
+        options.TokenValidationParameters = new()
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Authentication:Issuer"],
+            ValidAudience = builder.Configuration["Authentication:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.ASCII.GetBytes(builder.Configuration["Authentication:SecretForKey"])
+                )
+        };
+    });
+builder.Services.AddAuthorization(
+    options =>
+    {
+        options.AddPolicy("MustBeFromAntwerp", policy =>
+        {
+            policy.RequireAuthenticatedUser();
+            policy.RequireClaim("city", "Antwerp");
+        }
+        );
+
+    }
+);
 var app = builder.Build();
 
 
@@ -52,6 +81,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRouting();
+
+app.UseAuthentication();
 
 app.UseAuthorization();
 
